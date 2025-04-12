@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  music-bot:
+    build: .
+    container_name: apple-music-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=YOUR_BOT_TOKEN
+    volumes:
+      - ./downloads:/app/downloads
+      - ./cookies.txt:/app/cookies.txt
+      - ./temp:/app/temp
