@@ -4,3 +4,5 @@ mutagen==1.47.0
 Pillow==10.3.0
 pywidevine==1.6.0
 yt-dlp==2024.6.21
+m3u8==4.1.0
+sqlite3==2.6.0
