@@ -1,13 +1,13 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
-  music-bot:
+  apple-music-bot:
     build: .
-    container_name: apple-music-bot
-    restart: unless-stopped
-    environment:
-      - BOT_TOKEN=YOUR_BOT_TOKEN
     volumes:
       - ./downloads:/app/downloads
       - ./cookies.txt:/app/cookies.txt
-      - ./temp:/app/temp
+    environment:
+      - BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+      - PUBLIC_MODE=True
+    restart: unless-stopped
