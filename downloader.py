@@ -1,5 +1,4 @@
 import re
-import time
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -84,15 +83,8 @@ class Downloader:
             "artist": metadata.get("artistName", "Unknown"),
             "album": metadata.get("playlistName", "Unknown"),
             "track_number": metadata.get("trackNumber", 1),
-            "disc_number": metadata.get("discNumber", 1),
-            "genre": metadata.get("genre", ""),
-            "year": metadata.get("releaseDate", "")[:4]
         }
 
     def cleanup(self):
         shutil.rmtree(Config.TEMP_DIR, ignore_errors=True)
         Config.TEMP_DIR.mkdir(exist_ok=True)
-
-    def get_storage_usage(self) -> str:
-        total = sum(f.stat().st_size for f in Config.DOWNLOAD_DIR.glob('**/*') if f.is_file())
-        return f"{total / (1024**3):.2f} GB"
