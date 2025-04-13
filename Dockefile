@@ -1,13 +1,18 @@
-FROM python:3.11-slim
+# Dockerfile
+FROM python:3.10-slim
 
 WORKDIR /app
 
+# System dependencies များတင်
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies များ install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Project ဖိုင်များ copy
 COPY . .
-
-VOLUME /app/downloads
-VOLUME /app/cookies.txt
 
 CMD ["python", "bot.py"]
