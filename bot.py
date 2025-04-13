@@ -10,8 +10,9 @@ from telegram.ext import (
 )
 from config import Config
 from downloader import Downloader, DownloadError
+from database import Database
 
-# Initialize logging
+# Logging setup
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -22,28 +23,26 @@ class MusicBot:
     def __init__(self):
         self.app = Application.builder().token(Config.BOT_TOKEN).build()
         self.downloader = Downloader()
-        self.active_tasks = {}
+        self.db = Database()
         self.setup_handlers()
 
     def setup_handlers(self):
         handlers = [
             CommandHandler("start", self.start),
             CommandHandler("auth", self.auth_user),
-            CommandHandler("stats", self.bot_stats),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_link),
-            MessageHandler(filters.Document.ALL, self.handle_document)
+            CommandHandler("stats", self.stats),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_link)
         ]
         for handler in handlers:
             self.app.add_handler(handler)
 
     async def start(self, update: Update, context: CallbackContext):
         user = update.effective_user
-        msg = (
-            "🎵 *Apple Music Download Bot*\n\n"
-            "Send me any Apple Music song/album link!\n"
-            f"Public Mode: {'✅ ON' if Config.PUBLIC_MODE else '❌ OFF'}"
+        await update.message.reply_markdown_v2(
+            f"🎵 **Apple Music Download Bot**\n\n"
+            f"Send me any Apple Music link!\n"
+            f"`Public Mode: {'✅ ON' if Config.PUBLIC_MODE else '❌ OFF'}`"
         )
-        await update.message.reply_markdown(msg)
 
     async def auth_user(self, update: Update, context: CallbackContext):
         user = update.effective_user
@@ -53,9 +52,7 @@ class MusicBot:
         try:
             target_id = int(context.args[0])
             Config.AUTHORIZED_USERS.append(target_id)
-            await update.message.reply_html(
-                f"✅ Authorized user: <code>{target_id}</code>"
-            )
+            await update.message.reply_html(f"✅ Authorized user: <code>{target_id}</code>")
         except (IndexError, ValueError):
             await update.message.reply_html("⚠️ Usage: /auth <user_id>")
 
@@ -67,16 +64,24 @@ class MusicBot:
         if not Config.PUBLIC_MODE and user.id not in Config.AUTHORIZED_USERS:
             await update.message.reply_html("⛔️ You're not authorized!")
             return
+        
+        # Rate limiting
+        if self._check_rate_limit(user.id):
+            await update.message.reply_html("⚠️ Daily download limit reached!")
+            return
 
         try:
             status_msg = await update.message.reply_text("🔍 Processing your request...")
             
-            # Start download
+            # Download process
             file_path = await asyncio.to_thread(
                 self.downloader.process,
                 url,
                 user.id
             )
+            
+            # Log download
+            self.db.log_download(user.id)
             
             # Send result
             await update.message.reply_audio(
@@ -93,20 +98,27 @@ class MusicBot:
             await status_msg.edit_text(f"❌ Error: {str(e)}")
             logger.error(f"Download failed for {user.id}: {str(e)}")
 
-    async def bot_stats(self, update: Update, context: CallbackContext):
+    def _check_rate_limit(self, user_id: int) -> bool:
+        with closing(self.db.conn.cursor()) as c:
+            c.execute('SELECT downloads FROM users WHERE user_id=?', (user_id,))
+            result = c.fetchone()
+            return result and result[0] >= Config.MAX_DOWNLOADS_PER_USER
+
+    async def stats(self, update: Update, context: CallbackContext):
         if update.effective_user.id not in Config.ADMINS:
             return
         
-        stats = (
-            f"👥 Users: {len(Config.AUTHORIZED_USERS)}\n"
-            f"💾 Storage: {self.downloader.get_storage_usage()}\n"
-            f"🔥 Active Tasks: {len(self.active_tasks)}"
+        total_users, total_downloads = self.db.get_stats()
+        stats_msg = (
+            f"📊 Bot Statistics\n\n"
+            f"👥 Total Users: {total_users or 0}\n"
+            f"📥 Total Downloads: {total_downloads or 0}"
         )
-        await update.message.reply_text(stats)
+        await update.message.reply_text(stats_msg)
 
     def run(self):
-        Config.DOWNLOAD_DIR.mkdir(exist_ok=True)
-        Config.TEMP_DIR.mkdir(exist_ok=True)
+        Config.DOWNLOAD_DIR.mkdir(exist_ok=True, parents=True)
+        Config.TEMP_DIR.mkdir(exist_ok=True, parents=True)
         self.app.run_polling()
 
 if __name__ == "__main__":
